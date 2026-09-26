@@ -5,8 +5,10 @@
 // las funciones cuelgan de window), acá todo se cablea con addEventListener
 // porque este archivo es un módulo ES.
 import { supabase } from './supabaseClient.js';
+import { CATEGORIAS } from './config.js';
 import { getEstado, cerrarSesion } from './auth.js';
-import { cargarRodeos, obtenerRodeosCache, renombrarRodeo, darDeBajaRodeo, stockDelRodeo } from './rodeos.js';
+import { cargarRodeos, obtenerRodeosCache, renombrarRodeo, darDeBajaRodeo, stockDelRodeo,
+  cargarComposicionRodeos, composicionDelRodeo, hayComposicionCargada } from './rodeos.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -332,8 +334,64 @@ async function cambiarClaveUsuario() {
 // ─── Renombrar rodeo ───
 
 async function cargarRodeosPanel() {
-  await cargarRodeos();
+  // La composición dice de una cuánto tiene cada rodeo: sin eso habría que
+  // consultar el stock de a uno para saber cuáles quedaron vacíos.
+  await Promise.all([cargarRodeos(), cargarComposicionRodeos()]);
   renderListaRodeosPanel();
+}
+
+function textoStockDelRodeo(rodeoId) {
+  if (!hayComposicionCargada()) return '';
+  const composicion = composicionDelRodeo(rodeoId);
+  if (!composicion.length) return 'sin stock';
+  return composicion.map((c) => `${nombreCategoria(c.categoriaId)} ${c.cabezas}`).join(' · ');
+}
+
+function nombreCategoria(categoriaId) {
+  return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
+}
+
+// Los rodeos que ya no sirven: sin una sola cabeza adentro. Los 4 corrales
+// de Feed Lot quedan afuera de esta lista aunque estén vacíos — tienen que
+// existir siempre (ver darDeBajaRodeo en rodeos.js).
+function rodeosSinStock() {
+  if (!hayComposicionCargada()) return [];
+  return obtenerRodeosCache().filter((r) => r.establecimiento_id !== 'feed_lot'
+    && composicionDelRodeo(r.id).length === 0);
+}
+
+function renderRodeosSinStock() {
+  const titulo = el('cfgRodeosSinStockTitulo');
+  const lista = el('cfgRodeosSinStock');
+  lista.innerHTML = '';
+
+  if (!hayComposicionCargada()) {
+    titulo.textContent = 'Sin conexión no se puede saber qué rodeos quedaron vacíos.';
+    return;
+  }
+  const vacios = rodeosSinStock();
+  if (!vacios.length) {
+    titulo.textContent = 'Todos los rodeos tienen hacienda adentro.';
+    return;
+  }
+  titulo.textContent = vacios.length === 1
+    ? '1 rodeo sin stock — se puede dar de baja:'
+    : `${vacios.length} rodeos sin stock — se pueden dar de baja:`;
+
+  for (const rodeo of vacios) {
+    const fila = document.createElement('div');
+    fila.className = 'fila-cliente';
+    const nombre = document.createElement('span');
+    // textContent y no innerHTML: el nombre lo escribe el usuario.
+    nombre.textContent = rodeo.codigo;
+    fila.appendChild(nombre);
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = 'Dar de baja';
+    boton.addEventListener('click', () => darDeBajaRodeoDesdePanel(rodeo.id));
+    fila.appendChild(boton);
+    lista.appendChild(fila);
+  }
 }
 
 function renderListaRodeosPanel() {
@@ -343,10 +401,12 @@ function renderListaRodeosPanel() {
   for (const r of obtenerRodeosCache()) {
     const opt = document.createElement('option');
     opt.value = r.id;
-    opt.textContent = r.codigo;
+    const stock = textoStockDelRodeo(r.id);
+    opt.textContent = stock ? `${r.codigo} — ${stock}` : r.codigo;
     select.appendChild(opt);
   }
   select.value = seleccionPrevia;
+  renderRodeosSinStock();
 }
 
 async function onSeleccionRodeoLista() {
@@ -384,8 +444,8 @@ async function guardarNombreRodeo() {
   }
 }
 
-async function darDeBajaRodeoDesdePanel() {
-  const rodeoId = el('cfgListaRodeos').value;
+async function darDeBajaRodeoDesdePanel(idPedido) {
+  const rodeoId = typeof idPedido === 'string' ? idPedido : el('cfgListaRodeos').value;
   const msj = el('cfgRodeoMensaje');
   msj.textContent = '';
   if (!rodeoId) { msj.textContent = 'Elegí un rodeo de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
@@ -395,8 +455,11 @@ async function darDeBajaRodeoDesdePanel() {
     await darDeBajaRodeo(rodeoId);
     msj.textContent = `"${rodeo?.codigo || ''}" dado de baja.`;
     msj.className = 'mensaje-panel ok';
-    el('cfgRodeoNombreNuevo').value = '';
-    el('cfgRodeoStock').textContent = '';
+    if (el('cfgListaRodeos').value === rodeoId) {
+      el('cfgListaRodeos').value = '';
+      el('cfgRodeoNombreNuevo').value = '';
+      el('cfgRodeoStock').textContent = '';
+    }
     renderListaRodeosPanel();
   } catch (error) {
     msj.textContent = 'No se pudo dar de baja: ' + error.message;

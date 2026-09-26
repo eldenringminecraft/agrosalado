@@ -767,7 +767,16 @@
         <span>RODEOS</span><span class="panel-menu-flecha">›</span>
       </button>
       <div id="seccionRodeos" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">Renombrar (el año y la secuencia del código no cambian) o dar de baja un rodeo sin stock — un rodeo dado de baja deja de aparecer en las listas, pero su historial de movimientos no se toca.</p>
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Renombrar o dar de baja un rodeo sin stock — un rodeo dado de baja deja de aparecer en las listas, pero su historial de movimientos no se toca.</p>
+
+        <!-- Los que ya no sirven, juntos y con el botón al lado: si no,
+             hay que ir uno por uno con el selector de abajo para
+             enterarse de cuáles quedaron vacíos. -->
+        <div id="cfgRodeosSinStockBloque">
+          <div id="cfgRodeosSinStockTitulo" style="font-size:0.85em;font-weight:bold;"></div>
+          <div id="cfgRodeosSinStock" class="lista-clientes"></div>
+        </div>
+
         <select id="cfgListaRodeos"></select>
         <div id="cfgRodeoStock" style="font-size:0.85em;color:#666;"></div>
         <input type="text" id="cfgRodeoNombreNuevo" placeholder="Nombre nuevo">

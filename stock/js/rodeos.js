@@ -143,6 +143,14 @@ export async function renombrarRodeo(id, nuevoNombre) {
 // movimiento", Trabajo de Manga y este mismo panel, sin perder su
 // historial.
 export async function darDeBajaRodeo(id) {
+  // Los 4 corrales de Feed Lot existen siempre: todo movimiento que toque
+  // Feed Lot se resuelve contra uno de ellos (ver rodeoDelCorral), así que
+  // dar uno de baja —aunque esté vacío, que es lo normal— dejaría a Feed
+  // Lot sin forma de cargar nada.
+  const rodeo = cache.find((r) => r.id === id);
+  if (rodeo?.establecimiento_id === 'feed_lot') {
+    throw new Error('Los corrales de Feed Lot no se dan de baja: siempre tienen que existir.');
+  }
   const cabezas = await stockDelRodeo(id);
   if (cabezas > 0) {
     throw new Error(`Este rodeo todavía tiene ${cabezas} cabeza(s) de stock — no se puede dar de baja.`);
