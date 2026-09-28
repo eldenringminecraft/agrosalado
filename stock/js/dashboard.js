@@ -23,6 +23,39 @@ function esCliente(titularId) {
   return obtenerTitularesCache().find((x) => x.id === titularId)?.tipo === 'cliente';
 }
 
+// Agro Salado y Doña Julia no viven en la tabla titulares (son fijos), así
+// que el cache solo resuelve capitalizadores y clientes de hotelería.
+const NOMBRES_TITULAR_FIJOS = { agro_salado: 'Agro Salado', dona_julia: 'Doña Julia' };
+
+// Los nombres de capitalizadores y clientes de hotelería los escribe el
+// usuario, y acá se arman encabezados de tabla con innerHTML.
+function esc(texto) {
+  const d = document.createElement('div');
+  d.textContent = texto ?? '';
+  return d.innerHTML;
+}
+
+function nombreTitular(titularId) {
+  return NOMBRES_TITULAR_FIJOS[titularId]
+    || obtenerTitularesCache().find((t) => t.id === titularId)?.nombre
+    || titularId;
+}
+
+// Los titulares que tienen algo, en el orden en que se los piensa: primero
+// los propios, después capitalizadores y hotelería (por el orden con el que
+// están cargados en titulares).
+function titularesConStock(rows) {
+  const conStock = new Set();
+  for (const r of rows) if (r.cabezas !== 0) conStock.add(r.titular);
+  const propios = ['agro_salado', 'dona_julia'].filter((id) => conStock.has(id));
+  const resto = obtenerTitularesCache()
+    .filter((t) => conStock.has(t.id) && !NOMBRES_TITULAR_FIJOS[t.id])
+    .map((t) => t.id);
+  // Por las dudas: un titular con stock que no esté en el cache igual entra.
+  const sueltos = [...conStock].filter((id) => !propios.includes(id) && !resto.includes(id));
+  return [...propios, ...resto, ...sueltos];
+}
+
 // Filtra las filas de stock_actual según la "vista" de titularidad elegida.
 // titularElegido: el del desplegable que acompaña a "Capitalizadores" y a
 // "Hotelería" para ver uno solo en vez de la suma de todos.
@@ -199,11 +232,7 @@ function renderStockNegativo(rows) {
   const detalle = negativos.map((r) => {
     const rodeo = r.rodeo || obtenerRodeosCache().find((x) => x.id === r.rodeo_id)?.codigo || 'sin rodeo';
     const categoria = CATEGORIAS.find((c) => c.id === r.categoria)?.nombre || r.categoria;
-    // Agro Salado y Doña Julia no viven en la tabla titulares (son fijos),
-    // así que el cache solo resuelve capitalizadores/clientes.
-    const NOMBRES_BASE = { agro_salado: 'Agro Salado', dona_julia: 'Doña Julia' };
-    const titular = NOMBRES_BASE[r.titular] || obtenerTitularesCache().find((t) => t.id === r.titular)?.nombre || r.titular;
-    return `${rodeo} — ${categoria} de ${titular}: ${r.cabezas}`;
+    return `${rodeo} — ${categoria} de ${nombreTitular(r.titular)}: ${r.cabezas}`;
   }).join(' · ');
   contenedor.textContent = `⚠️ Hay stock en negativo (se sacaron más cabezas de las que había): ${detalle}. Estos totales están mal hasta que se corrija: revisá el Historial de ese rodeo y anulá o corregí el movimiento que sobra.`;
   contenedor.classList.remove('oculto');
@@ -237,29 +266,58 @@ function categoriasConStock(rows) {
   return CATEGORIAS.filter((c) => hay.has(c.id));
 }
 
-function renderGlobal(rows) {
+// En la vista "Total" este cuadro se abre por titular: el total sigue
+// primero (es el número que se mira) y cada titular suma su columna, en
+// vez del kilaje promedio — mezclar hacienda de varios dueños en un mismo
+// promedio no dice nada útil, y de quién es cada cosa sí.
+function renderGlobal(rows, porTitular) {
   const totales = {};
   for (const c of CATEGORIAS) totales[c.id] = 0;
   for (const r of rows) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
-  const kilos = totalesKilosPorCategoria(rows);
 
-  const tbody = el('dash-global-tabla').querySelector('tbody');
+  const tabla = el('dash-global-tabla');
+  const titulares = porTitular ? titularesConStock(rows) : [];
+  tabla.querySelector('thead').innerHTML = porTitular
+    ? `<tr><th>Categoría</th><th>Total</th>${titulares.map((t) => `<th>${esc(nombreTitular(t))}</th>`).join('')}</tr>`
+    : '<tr><th>Categoría</th><th>Cabezas</th><th>Kg prom.</th></tr>';
+
+  const tbody = tabla.querySelector('tbody');
   tbody.innerHTML = '';
   const visibles = CATEGORIAS.filter((c) => totales[c.id] !== 0);
   if (!visibles.length) {
-    tbody.innerHTML = '<tr><td colspan="3">Sin stock para esta selección.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${porTitular ? titulares.length + 2 : 3}">Sin stock para esta selección.</td></tr>`;
     return;
   }
+
+  // porTitular[categoria][titular] = cabezas
+  const matriz = {};
+  if (porTitular) {
+    for (const r of rows) {
+      matriz[r.categoria] = matriz[r.categoria] || {};
+      matriz[r.categoria][r.titular] = (matriz[r.categoria][r.titular] || 0) + r.cabezas;
+    }
+  }
+  const kilos = porTitular ? null : totalesKilosPorCategoria(rows);
+
   for (const c of visibles) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td><td class="kilos-cell">${formatearKilos(kilos[c.id])}</td>`;
+    tr.innerHTML = porTitular
+      ? `<td>${c.nombre}</td><td><strong>${totales[c.id]}</strong></td>` +
+        titulares.map((t) => `<td>${matriz[c.id]?.[t] || ''}</td>`).join('')
+      : `<td>${c.nombre}</td><td>${totales[c.id]}</td><td class="kilos-cell">${formatearKilos(kilos[c.id])}</td>`;
     tbody.appendChild(tr);
   }
 
   const totalGeneral = Object.values(totales).reduce((a, b) => a + b, 0);
   const trTotal = document.createElement('tr');
   trTotal.classList.add('fila-total');
-  trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td><td></td>`;
+  trTotal.innerHTML = porTitular
+    ? `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td>` +
+      titulares.map((t) => {
+        const suma = rows.filter((r) => r.titular === t).reduce((acc, r) => acc + r.cabezas, 0);
+        return `<td><strong>${suma}</strong></td>`;
+      }).join('')
+    : `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td><td></td>`;
   tbody.appendChild(trTotal);
 }
 
@@ -348,10 +406,6 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
 // estén vacíos: que un corral figure en cero es información, no un dato que
 // falta. Por eso se recorre la lista fija y no los rodeos que tengan stock.
 const CORRALES_FEED_LOT = ['1', '2', '3', '4'];
-
-function nombreTitular(titularId) {
-  return obtenerTitularesCache().find((t) => t.id === titularId)?.nombre || titularId;
-}
 
 // De quién es la hacienda que hay en un corral, con el desglose por
 // categoría de cada uno — es lo que se despliega al tocar la fila.
@@ -528,7 +582,9 @@ function renderTablasFiltradas() {
   const { vista, titularElegido } = leerVista('dash-vista', 'dash-vista-cap-select');
   const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido);
 
-  renderGlobal(rows);
+  // Solo en "Total" tiene sentido abrir por titular: en cualquier otra
+  // vista ya se está mirando a uno solo (o a un grupo puntual).
+  renderGlobal(rows, vista === 'total');
   renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
   renderPorCorral(rows.filter((r) => r.establecimiento === 'feed_lot'));
 }
@@ -593,7 +649,6 @@ export async function refrescarDashboard() {
 function filasDetalleParaExcel(establecimientoId) {
   const ordenEst = Object.fromEntries(ESTABLECIMIENTOS.map((e, i) => [e.id, i]));
   const ordenCat = Object.fromEntries(CATEGORIAS.map((c, i) => [c.id, i]));
-  const nombreTitular = (id) => obtenerTitularesCache().find((t) => t.id === id)?.nombre || id;
 
   return ultimasFilasStock
     .filter((r) => r.cabezas !== 0 && (!establecimientoId || r.establecimiento === establecimientoId))
