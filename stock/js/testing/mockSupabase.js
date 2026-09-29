@@ -43,6 +43,11 @@ export function tablasVacias() {
     trabajos_manga: [],
     trabajo_manga_propietarios: [],
     trabajo_manga_categorias: [],
+    animales: [],
+    sesiones_baston: [],
+    lecturas_baston: [],
+    columnas_baston: [],
+    codigos_baston: [],
     feed_lot_ciclos: [],
     rodeo_secuencias: [],
     rodeo_pesadas_historial: [],
@@ -141,6 +146,21 @@ function historialTrabajosMangaDe(TABLAS) {
     .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
 }
 
+// La vista historial_lecturas_baston: join de lecturas + sesión + animal.
+function historialLecturasBastonDe(TABLAS) {
+  return TABLAS.lecturas_baston.map((l) => {
+    const sesion = TABLAS.sesiones_baston.find((x) => x.id === l.sesion_id) || {};
+    const animal = TABLAS.animales.find((x) => x.id === l.animal_id) || {};
+    return {
+      ...l,
+      sesion: sesion.nombre ?? null,
+      fecha: sesion.fecha ?? null,
+      establecimiento_id: sesion.establecimiento_id ?? null,
+      eid: animal.eid ?? null,
+    };
+  });
+}
+
 // ─── triggers de movimientos ────────────────────────────────────────────
 
 function stockDelBolsillo(TABLAS, est, cat, tit, rodeoId, excluirId) {
@@ -200,7 +220,22 @@ export function activarMockSupabase(supabase, tablas) {
   //   window.__MOCK.fallas.update = { code: 'X', message: 'lo que sea' }
   //   window.__MOCK.fallas.update = { message: 'Failed to fetch' }  // "sin red"
   const fallas = { insert: null, upsert: null, update: null };
-  const comoError = (falla) => ({ then: (resolve) => resolve({ data: null, error: falla }) });
+  // Un error tiene que poder encadenarse igual que una consulta que anda:
+  // el cliente real permite .insert(...).select().single() y devuelve el
+  // error al final, no al llamar .select(). Sin esto, el código que usa
+  // esa cadena revienta con un TypeError en vez de recibir el error.
+  const comoError = (falla) => {
+    const fin = { data: null, error: falla };
+    const encadenable = {
+      then: (resolve) => resolve(fin),
+      single: () => Promise.resolve(fin),
+      maybeSingle: () => Promise.resolve(fin),
+    };
+    for (const metodo of ['select', 'eq', 'neq', 'is', 'in', 'gt', 'gte', 'lt', 'lte', 'ilike', 'or', 'order', 'limit']) {
+      encadenable[metodo] = () => encadenable;
+    }
+    return encadenable;
+  };
 
   supabase.auth.getSession = async () => ({ data: { session: { user: { id: 'u1' } } } });
   supabase.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
@@ -210,11 +245,13 @@ export function activarMockSupabase(supabase, tablas) {
   supabase.rpc = async () => ({ data: ++secuencia, error: null });
 
   supabase.from = (tabla) => {
-    const esVista = tabla === 'stock_actual' || tabla === 'historial_trabajos_manga';
+    const esVista = tabla === 'stock_actual' || tabla === 'historial_trabajos_manga'
+      || tabla === 'historial_lecturas_baston';
     if (!esVista) TABLAS[tabla] = TABLAS[tabla] || [];
     let filas;
     if (tabla === 'stock_actual') filas = stockActualDe(TABLAS);
     else if (tabla === 'historial_trabajos_manga') filas = historialTrabajosMangaDe(TABLAS);
+    else if (tabla === 'historial_lecturas_baston') filas = historialLecturasBastonDe(TABLAS);
     else filas = [...TABLAS[tabla]];
     let modo = 'select';
     let payload = null;
@@ -235,7 +272,14 @@ export function activarMockSupabase(supabase, tablas) {
         if (tabla === 'movimientos') {
           for (const mov of nuevas) {
             const error = validarStockNoNegativo(TABLAS, mov);
-            if (error) return { then: (resolve) => resolve({ data: null, error: { code: 'P0001', message: error } }) };
+            if (error) return comoError({ code: 'P0001', message: error });
+          }
+        }
+        if (tabla === 'sesiones_baston') {
+          for (const nueva of nuevas) {
+            if (TABLAS.sesiones_baston.some((x) => x.nombre === nueva.nombre && x.fecha === nueva.fecha)) {
+              return comoError({ code: '23505', message: 'duplicate key value violates unique constraint' });
+            }
           }
         }
         TABLAS[tabla].push(...nuevas);
@@ -246,15 +290,16 @@ export function activarMockSupabase(supabase, tablas) {
       upsert(obj, opciones) {
         if (fallas.upsert) return comoError(fallas.upsert);
         const objs = Array.isArray(obj) ? obj : [obj];
+        const claves = (opciones?.onConflict || 'id').split(',').map((c) => c.trim());
         for (const o of objs) {
-          const existente = TABLAS[tabla].find((f) => f.id === o.id);
+          const existente = TABLAS[tabla].find((f) => claves.every((k) => f[k] === o[k]));
           if (existente) {
             if (!opciones?.ignoreDuplicates) Object.assign(existente, o);
             continue;
           }
           if (tabla === 'movimientos') {
             const error = validarStockNoNegativo(TABLAS, o);
-            if (error) return { then: (resolve) => resolve({ data: null, error: { code: 'P0001', message: error } }) };
+            if (error) return comoError({ code: 'P0001', message: error });
           }
           TABLAS[tabla].push({ ...o });
           if (tabla === 'movimientos') actualizarRodeoTrasMovimiento(TABLAS, o);

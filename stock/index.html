@@ -55,6 +55,7 @@
       <button data-ir="manga">Trabajo de Manga</button>
       <button data-ir="dashboard">Stock</button>
       <button data-ir="historial">Historial</button>
+      <button data-ir="baston">Bastón</button>
       <button data-ir="reportes">Reportes</button>
     </nav>
 
@@ -580,6 +581,89 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ─── BASTÓN: lecturas individuales por caravana electrónica ───
+         Otra capa que la del resto de la app: acá el animal es de a uno,
+         no un número dentro de un bolsillo de stock. Ver migración 046. -->
+    <section id="pantalla-baston" data-screen="baston" class="oculto">
+      <h2>📟 Bastón</h2>
+      <p class="ayuda">
+        Cada archivo del bastón es una sesión de trabajo: se sube acá, se
+        guarda animal por animal (identificado por su caravana electrónica)
+        y se analiza. No mueve stock.
+      </p>
+
+      <div class="filtros">
+        <button type="button" class="boton-secundario baston-tab activo" data-subseccion="subir">Subir sesión</button>
+        <button type="button" class="boton-secundario baston-tab" data-subseccion="sesiones">Sesiones</button>
+        <button type="button" class="boton-secundario baston-tab" data-subseccion="animal">Buscar animal</button>
+      </div>
+
+      <!-- ① SUBIR ─────────────────────────────────────────────────── -->
+      <div id="baston-subir" class="baston-seccion">
+        <div class="campo-grupo full">
+          <label>Archivo del bastón (.csv)
+            <input type="file" id="baston-archivo" accept=".csv,text/csv">
+          </label>
+          <div id="baston-lectura-mensaje" class="mensaje"></div>
+        </div>
+
+        <!-- Lo que la app entendió, ANTES de guardar nada: el archivo se lee
+             en el propio celular, no se sube a ningún lado hasta confirmar. -->
+        <div id="baston-previo" class="oculto">
+          <div class="campo-grupo full">
+            <div class="etiqueta-grupo">📄 Lo que trae el archivo</div>
+            <div id="baston-previo-resumen"></div>
+            <div id="baston-previo-avisos"></div>
+          </div>
+
+          <div id="baston-desconocidos" class="campo-grupo full oculto">
+            <div class="etiqueta-grupo">❓ Esto no lo conozco todavía</div>
+            <p class="ayuda">Se pregunta una sola vez: la próxima sesión con estas columnas ya no lo vuelve a preguntar.</p>
+            <div id="baston-desconocidos-lista"></div>
+          </div>
+
+          <div class="formulario">
+            <label>Nombre de la sesión
+              <input type="text" id="baston-sesion-nombre" required>
+            </label>
+            <label>Fecha del trabajo
+              <input type="date" id="baston-sesion-fecha" required>
+            </label>
+            <div class="campo-grupo full">
+              <div class="etiqueta-grupo">Establecimiento (opcional)</div>
+              <select id="baston-sesion-establecimiento"></select>
+            </div>
+            <div class="campo-grupo full">
+              <div class="etiqueta-grupo">Rodeo (opcional)</div>
+              <select id="baston-sesion-rodeo"></select>
+            </div>
+            <label class="full">Observaciones
+              <textarea id="baston-sesion-observaciones" rows="2"></textarea>
+            </label>
+            <button type="button" id="baston-guardar" class="full">Guardar sesión</button>
+            <div id="baston-guardar-mensaje" class="mensaje full"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② SESIONES ──────────────────────────────────────────────── -->
+      <div id="baston-sesiones" class="baston-seccion oculto">
+        <div id="baston-sesiones-lista"></div>
+        <div id="baston-sesion-detalle" class="oculto imprimible"></div>
+      </div>
+
+      <!-- ③ BUSCAR ANIMAL ─────────────────────────────────────────── -->
+      <div id="baston-animal" class="baston-seccion oculto">
+        <div class="filtros">
+          <label>Caravana (visual o electrónica)
+            <input type="text" id="baston-animal-buscar" placeholder="Ej: 4975">
+          </label>
+          <button type="button" id="baston-animal-boton" class="boton-secundario">Buscar</button>
+        </div>
+        <div id="baston-animal-resultado"></div>
       </div>
     </section>
 

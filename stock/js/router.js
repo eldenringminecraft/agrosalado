@@ -2,9 +2,10 @@ import { refrescarDashboard } from './dashboard.js';
 import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarConsultaManga } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
+import { refrescarBaston } from './baston.js';
 import { refrescarConsultaEstablecimiento, refrescarRodeosDeCarga } from './movimientos.js';
 
-const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
+const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'baston', 'reportes'];
 // Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
 // pantallas quedan para encargado/administrativo/owner).
 const PANTALLAS_PUESTERO = ['cargar', 'manga'];
@@ -47,6 +48,7 @@ function renderRoute(rol) {
   // entra a esta pantalla para que eso no se note.
   if (pantalla === 'cargar') { refrescarConsultaEstablecimiento(); refrescarRodeosDeCarga(); }
   if (pantalla === 'manga') refrescarConsultaManga();
+  if (pantalla === 'baston') refrescarBaston();
   if (pantalla === 'reportes') refrescarReportes();
 }
 
