@@ -4,7 +4,7 @@ import { getEstado } from './auth.js';
 import { exportarHistorial, exportarTrabajosManga } from './export.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
-import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado, puedeAnularManga, anularTrabajoManga } from './trabajoMangaDetalle.js';
+import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado, puedeAnularManga, anularTrabajoManga, esc } from './trabajoMangaDetalle.js';
 
 const VENTANA_ANULACION_HORAS = 48;
 
@@ -261,7 +261,7 @@ function renderFilasManga(trabajos) {
   const tbody = el('hist-manga-tabla').querySelector('tbody');
   tbody.innerHTML = '';
   if (!trabajos.length) {
-    tbody.innerHTML = '<tr><td colspan="10">Sin trabajos de manga en el rango elegido.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11">Sin trabajos de manga en el rango elegido.</td></tr>';
     return;
   }
   for (const t of trabajos) {
@@ -271,14 +271,15 @@ function renderFilasManga(trabajos) {
     tr.innerHTML = `
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
-      <td>${t.rodeo || ''}</td>
+      <td>${esc(t.rodeo || '')}</td>
       <td>${t.categoriasTexto}</td>
       <td>${t.cantidad_encerrada ?? t.cantidad_trabajada}</td>
       <td>${t.cantidad_trabajada}${esRectificado(t) ? ' ✏️' : ''}</td>
-      <td>${t.propietariosTexto}</td>
-      <td>${t.detalleTexto}</td>
-      <td>${t.usuario_nombre || ''}</td>
-      <td>${t.anulado ? `Anulado (${t.anulado_motivo || 'sin motivo'})` : ''}</td>
+      <td>${esc(t.propietariosTexto)}</td>
+      <td>${esc(t.detalleTexto)}</td>
+      <td class="celda-observaciones">${esc(t.observaciones || '')}</td>
+      <td>${esc(t.usuario_nombre || '')}</td>
+      <td>${t.anulado ? `Anulado (${esc(t.anulado_motivo || 'sin motivo')})` : ''}</td>
       <td></td>
     `;
     if (puedeAnularManga(t)) {

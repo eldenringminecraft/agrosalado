@@ -577,6 +577,14 @@ button:active { filter: brightness(0.9); }
 .tabla tr.fila-clickeable:hover td { background: #f5f5f5; }
 .tabla tr.fila-rodeos td { background: #fafafa; white-space: normal; }
 .tabla .kilos-cell { color: #666; font-size: 0.85em; }
+/* Las observaciones son texto libre y las celdas de la tabla no cortan
+   línea: sin esto, una observación de dos renglones estira la tabla a lo
+   ancho de la pantalla y media. */
+.tabla .celda-observaciones {
+  white-space: normal;
+  min-width: 160px;
+  max-width: 260px;
+}
 .ayuda { font-size: 0.85em; color: #666; margin: 4px 0 8px; }
 
 .link-rodeo {

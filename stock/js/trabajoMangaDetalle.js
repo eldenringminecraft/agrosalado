@@ -73,6 +73,17 @@ export async function cargarCatalogosSanidad() {
   };
 }
 
+// Las celdas de las tablas de Historial y Reportes se arman con
+// innerHTML, y varios de esos campos los escribe el usuario: el nombre
+// del rodeo, las observaciones, el motivo de una anulación, el nombre de
+// un capitalizador. Sin esto, escribir una etiqueta HTML en cualquiera de
+// esos campos la ejecuta en la pantalla del que después mira el reporte.
+export function esc(texto) {
+  const d = document.createElement('div');
+  d.textContent = texto ?? '';
+  return d.innerHTML;
+}
+
 export function nombreCategoriaManga(categoriaId) {
   return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
 }
