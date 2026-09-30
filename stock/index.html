@@ -660,7 +660,20 @@
           <button type="button" id="baston-borrar-sesion" class="boton-anular oculto" style="width:auto;">Eliminar esta sesión</button>
           <span id="baston-datos-cuenta" class="ayuda"></span>
         </div>
-        <p class="ayuda">Tocá un encabezado para ordenar por esa columna, o una caravana para ver ese animal.</p>
+        <p class="ayuda">Tocá un encabezado para ordenar, una caravana para ver ese animal, o una celda de categoría o peso para corregirla.</p>
+
+        <!-- Carga masiva: el bastón no sabe qué es cada animal, y en una
+             misma jornada hay vacas, vaquillonas y terneros al pie
+             mezclados. Se filtra u ordena hasta aislar el grupo, se
+             seleccionan las filas y se les pone la categoría de una. -->
+        <div id="baston-masivo" class="baston-masivo oculto">
+          <span id="baston-masivo-cuenta"></span>
+          <select id="baston-masivo-categoria"><option value="">Asignar categoría...</option></select>
+          <button type="button" id="baston-masivo-aplicar" class="boton-secundario">Aplicar</button>
+          <button type="button" id="baston-masivo-limpiar" class="boton-secundario">Deseleccionar</button>
+        </div>
+        <div id="baston-masivo-mensaje" class="mensaje"></div>
+
         <div id="baston-datos-tabla" style="overflow-x:auto;"></div>
       </div>
 

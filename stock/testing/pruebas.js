@@ -528,8 +528,16 @@ prueba('la planilla del bastón ordena y filtra', async () => {
   app.doc.querySelector('.baston-tab[data-subseccion="datos"]').click();
   await esperarA(() => app.doc.querySelector('#baston-datos-tabla tbody tr'), 'la tabla');
 
-  const pesos = () => [...app.doc.querySelectorAll('#baston-datos-tabla tbody tr')]
-    .map((tr) => Number(tr.cells[5].textContent));
+  // Por el nombre del encabezado y no por el número de columna: agregar
+  // una columna a la planilla no tiene que romper esta prueba (ya pasó al
+  // sumar el tilde de selección y la categoría).
+  const columnaDe = (titulo) => [...app.doc.querySelectorAll('#baston-datos-tabla thead th')]
+    .findIndex((th) => th.textContent.replace(/[▲▼\s]/g, '') === titulo);
+  const pesos = () => {
+    const i = columnaDe('Peso');
+    return [...app.doc.querySelectorAll('#baston-datos-tabla tbody tr')]
+      .map((tr) => Number(tr.cells[i].textContent));
+  };
   app.doc.querySelector('.baston-th[data-campo="peso_kg"]').click();
   await demora(200);
   const asc = pesos();
@@ -541,6 +549,91 @@ prueba('la planilla del bastón ordena y filtra', async () => {
   app.escribir('baston-datos-filtro', 'Vacía');
   await demora(300);
   contiene(app.texto('baston-datos-cuenta'), '8 de 20', 'el filtro cuenta lo que quedó');
+});
+
+prueba('se puede asignar una categoría de a muchas filas a la vez', async () => {
+  const app = await abrirApp({ titulares: TITULARES }, 'baston');
+  await app.ir('baston');
+  await subirCsv(app, csvBaston(FILAS_BASTON), 'SESION A.csv');
+  app.doc.querySelector('input[data-codigo="P IATF"]').value = 'Preñada';
+  app.doc.querySelector('input[data-codigo="V/RE SINCRO"]').value = 'Vacía';
+  app.$('baston-guardar').click();
+  await esperarA(() => app.tablas.lecturas_baston.length === 20, 'la sesión');
+
+  app.doc.querySelector('.baston-tab[data-subseccion="datos"]').click();
+  await esperarA(() => app.doc.querySelector('#baston-datos-tabla tbody tr'), 'la planilla');
+
+  // Se aísla el grupo con el filtro y se marca todo lo que quedó a la
+  // vista: así es como se separan las vacas de los terneros al pie
+  // cuando vinieron todos juntos en la misma jornada.
+  app.escribir('baston-datos-filtro', 'Vacía');
+  await demora(300);
+  contiene(app.texto('baston-datos-cuenta'), '8 de 20', 'el filtro deja 8');
+
+  app.$('baston-marcar-todo').click();
+  await demora(300);
+  contiene(app.texto('baston-masivo-cuenta'), '8 filas', 'quedan 8 seleccionadas');
+
+  app.elegir('baston-masivo-categoria', 'vaca');
+  app.$('baston-masivo-aplicar').click();
+  await esperarA(() => app.tablas.lecturas_baston.filter((l) => l.categoria_id === 'vaca').length === 8,
+    'que se asigne la categoría a las 8');
+
+  igual(app.tablas.lecturas_baston.filter((l) => l.categoria_id === null || l.categoria_id === undefined).length, 12,
+    'las otras 12 quedan sin categoría');
+});
+
+prueba('se puede corregir el peso de una lectura tocando la celda', async () => {
+  const app = await abrirApp({ titulares: TITULARES }, 'baston');
+  await app.ir('baston');
+  await subirCsv(app, csvBaston(FILAS_BASTON), 'SESION A.csv');
+  for (const input of app.doc.querySelectorAll('#baston-desconocidos-lista input[data-codigo]')) input.value = 'x';
+  app.$('baston-guardar').click();
+  await esperarA(() => app.tablas.lecturas_baston.length === 20, 'la sesión');
+
+  app.doc.querySelector('.baston-tab[data-subseccion="datos"]').click();
+  await esperarA(() => app.doc.querySelector('#baston-datos-tabla tbody tr'), 'la planilla');
+
+  const celda = app.doc.querySelector('.baston-editable[data-campo="peso_kg"]');
+  const idLectura = celda.dataset.id;
+  celda.click();
+  const control = await esperarA(() => celda.querySelector('input'), 'que se abra el campo');
+  control.value = '512';
+  control.dispatchEvent(new app.ventana.Event('blur'));
+  await esperarA(() => app.tablas.lecturas_baston.find((l) => l.id === idLectura)?.peso_kg === 512,
+    'que se guarde el peso corregido');
+});
+
+prueba('la ganancia diaria sale de la diferencia entre dos pesadas', async () => {
+  const app = await abrirApp({ titulares: TITULARES }, 'baston');
+  await app.ir('baston');
+  // Mismo animal, dos jornadas separadas por 30 días: 400 kg y 430 kg.
+  const unAnimal = (fecha, peso) => csvBaston([
+    `4801,032 010012348838,${fecha},08:00:00,,,${peso},,,P IATF,`,
+  ]);
+  await subirCsv(app, unAnimal('2026-09-01', 400), 'PRIMERA.csv');
+  app.doc.querySelector('input[data-codigo="P IATF"]').value = 'Preñada';
+  app.$('baston-guardar').click();
+  await esperarA(() => app.tablas.lecturas_baston.length === 1, 'la primera pesada');
+
+  await subirCsv(app, unAnimal('2026-10-01', 430), 'SEGUNDA.csv');
+  app.$('baston-guardar').click();
+  await esperarA(() => app.tablas.lecturas_baston.length === 2, 'la segunda pesada');
+
+  app.doc.querySelector('.baston-tab[data-subseccion="datos"]').click();
+  await esperarA(() => app.doc.querySelector('#baston-datos-tabla .baston-link'), 'la planilla');
+  app.doc.querySelector('#baston-datos-tabla .baston-link').click();
+  await esperarA(() => app.doc.querySelector('#baston-animal-resultado table tbody tr'), 'la ficha del animal');
+
+  const filas = [...app.doc.querySelectorAll('#baston-animal-resultado tbody tr')]
+    .map((tr) => [...tr.cells].map((c) => c.textContent.trim()));
+  const encabezados = [...app.doc.querySelectorAll('#baston-animal-resultado thead th')].map((t) => t.textContent);
+  const columna = encabezados.indexOf('Ganancia diaria (kg)');
+  ok(columna > 0, `falta la columna de ganancia diaria — había: ${encabezados}`);
+
+  igual(filas[0][columna], '—', 'la primera pesada no tiene contra qué compararse');
+  contiene(filas[1][columna], '1', '30 kg en 30 días = 1 kg por día');
+  contiene(filas[1][columna], '30 kg en 30 días', 'y tiene que mostrar de dónde sale');
 });
 
 // ═══ Correr y mostrar ═══════════════════════════════════════════════════

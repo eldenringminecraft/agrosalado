@@ -16,7 +16,7 @@
 // pena sacar. Los promedios y porcentajes vienen después, cuando estén
 // definidos.
 import { supabase } from './supabaseClient.js';
-import { ESTABLECIMIENTOS } from './config.js';
+import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { getEstado } from './auth.js';
 
@@ -407,9 +407,17 @@ const COLUMNAS_TABLA = [
   { campo: 'hora', titulo: 'Hora' },
   { campo: 'vid', titulo: 'Caravana', clickeable: true },
   { campo: 'eid', titulo: 'Electrónica', clickeable: true },
-  { campo: 'peso_kg', titulo: 'Peso', numerica: true },
-  { campo: 'ganancia_diaria', titulo: 'Gan. diaria', numerica: true },
+  // Editables: el archivo llega incompleto todo el tiempo (no había
+  // balanza, el operario no alcanzó a pesar) y la categoría el bastón no
+  // la sabe nunca — se carga a mano, acá o de a grupos.
+  { campo: 'categoria_id', titulo: 'Categoría', editable: 'categoria', verPor: 'categoria_nombre' },
+  { campo: 'peso_kg', titulo: 'Peso', numerica: true, editable: 'numero' },
+  { campo: 'ganancia_diaria', titulo: 'Gan. bastón', numerica: true },
 ];
+
+function nombreCategoria(categoriaId) {
+  return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId || '';
+}
 
 async function cargarDatos() {
   const [{ data: sesiones }, { data: lecturas, error }] = await Promise.all([
@@ -425,6 +433,8 @@ async function cargarDatos() {
   lecturasCache = (lecturas || []).map((l) => ({
     ...l,
     hora: (l.leido_at || '').slice(11, 19),
+    // Para que ordenar y filtrar por categoría use el nombre y no el id.
+    categoria_nombre: nombreCategoria(l.categoria_id),
     // Las columnas propias se aplanan como campos más, así ordenar y
     // filtrar funciona igual para todas.
     ...Object.fromEntries(Object.entries(l.datos || {})
@@ -445,6 +455,47 @@ async function cargarDatos() {
   renderTablaDatos();
 }
 
+// Filas marcadas para la carga masiva. Se guardan por id de lectura y no
+// por posición: ordenar o filtrar no tiene que perder la selección.
+let seleccionadas = new Set();
+
+function mensajeMasivo(texto, tipo) {
+  const contenedor = el('baston-masivo-mensaje');
+  contenedor.textContent = texto;
+  contenedor.className = `mensaje ${tipo || ''}`;
+}
+
+// Corrige una lectura ya guardada. Se actualiza también la copia en
+// memoria para no tener que recargar toda la planilla por un dato.
+async function corregirLectura(lecturaId, cambios) {
+  const { error } = await supabase.from('lecturas_baston').update(cambios).eq('id', lecturaId);
+  if (error) {
+    mensajeMasivo('No se pudo guardar: ' + error.message, 'error');
+    return false;
+  }
+  const fila = lecturasCache.find((l) => l.id === lecturaId);
+  if (fila) Object.assign(fila, cambios);
+  return true;
+}
+
+async function aplicarCategoriaMasiva() {
+  const categoriaId = el('baston-masivo-categoria').value;
+  if (!categoriaId) { mensajeMasivo('Elegí una categoría.', 'error'); return; }
+  if (!seleccionadas.size) return;
+  const ids = [...seleccionadas];
+  mensajeMasivo(`Asignando ${nombreCategoria(categoriaId)} a ${ids.length}...`, '');
+
+  const { error } = await supabase.from('lecturas_baston')
+    .update({ categoria_id: categoriaId }).in('id', ids);
+  if (error) { mensajeMasivo('No se pudo guardar: ' + error.message, 'error'); return; }
+
+  for (const fila of lecturasCache) if (seleccionadas.has(fila.id)) fila.categoria_id = categoriaId;
+  mensajeMasivo(`✅ ${ids.length} lectura(s) quedaron como ${nombreCategoria(categoriaId)}.`, 'ok');
+  seleccionadas = new Set();
+  el('baston-masivo-categoria').value = '';
+  renderTablaDatos();
+}
+
 function columnasDeLaTabla() {
   return [
     ...COLUMNAS_TABLA,
@@ -458,12 +509,15 @@ function filasFiltradas() {
   let filas = lecturasCache;
   if (sesionId) filas = filas.filter((f) => f.sesion_id === sesionId);
   if (texto) {
-    const columnas = columnasDeLaTabla().map((c) => c.campo);
+    // Se busca por lo que se VE: filtrar "Ternero al pie" tiene que
+    // encontrar las filas cuya categoría es "ternero_al_pie".
+    const columnas = columnasDeLaTabla().map((c) => c.verPor || c.campo);
     filas = filas.filter((f) => columnas.some((c) => String(f[c] ?? '').toLowerCase().includes(texto)));
   }
   const columna = columnasDeLaTabla().find((c) => c.campo === orden.campo);
+  const porDonde = columna?.verPor || orden.campo;
   return [...filas].sort((a, b) => {
-    const av = a[orden.campo], bv = b[orden.campo];
+    const av = a[porDonde], bv = b[porDonde];
     if (av === null || av === undefined || av === '') return 1;  // los vacíos, al final
     if (bv === null || bv === undefined || bv === '') return -1;
     const cmp = columna?.numerica ? Number(av) - Number(bv) : String(av).localeCompare(String(bv), 'es');
@@ -492,20 +546,34 @@ function renderTablaDatos() {
     return;
   }
 
-  const thead = columnas.map((c) => {
-    const flecha = orden.campo === c.campo ? (orden.ascendente ? ' ▲' : ' ▼') : '';
-    return `<th class="baston-th" data-campo="${esc(c.campo)}">${esc(c.titulo)}${flecha}</th>`;
+  const todasMarcadas = filas.length > 0 && filas.every((f) => seleccionadas.has(f.id));
+  const thead = `<th class="baston-check"><input type="checkbox" id="baston-marcar-todo" ${todasMarcadas ? 'checked' : ''}></th>`
+    + columnas.map((c) => {
+      const flecha = orden.campo === c.campo ? (orden.ascendente ? ' ▲' : ' ▼') : '';
+      return `<th class="baston-th" data-campo="${esc(c.campo)}">${esc(c.titulo)}${flecha}</th>`;
+    }).join('');
+
+  const tbody = filas.map((f) => {
+    const celdas = columnas.map((c) => {
+      const valor = f[c.campo];
+      const vacio = valor === null || valor === undefined || valor === '';
+      if (c.editable) {
+        const texto = c.editable === 'categoria' ? nombreCategoria(valor) : (vacio ? '' : String(valor));
+        return `<td class="baston-editable" data-id="${esc(f.id)}" data-campo="${esc(c.campo)}" data-editable="${c.editable}">${
+          texto ? esc(texto) : '<span class="baston-vacio">+</span>'}</td>`;
+      }
+      const texto = vacio ? '—' : esc(String(valor));
+      return c.clickeable && valor
+        ? `<td><button type="button" class="baston-link" data-animal="${esc(f.animal_id)}">${texto}</button></td>`
+        : `<td>${texto}</td>`;
+    }).join('');
+    return `<tr${seleccionadas.has(f.id) ? ' class="marcada"' : ''}>`
+      + `<td class="baston-check"><input type="checkbox" data-marcar="${esc(f.id)}" ${seleccionadas.has(f.id) ? 'checked' : ''}></td>`
+      + celdas + '</tr>';
   }).join('');
 
-  const tbody = filas.map((f) => columnas.map((c) => {
-    const valor = f[c.campo];
-    const texto = valor === null || valor === undefined || valor === '' ? '—' : esc(String(valor));
-    return c.clickeable && valor
-      ? `<td><button type="button" class="baston-link" data-animal="${esc(f.animal_id)}">${texto}</button></td>`
-      : `<td>${texto}</td>`;
-  }).join('')).map((celdas) => `<tr>${celdas}</tr>`).join('');
-
   contenedor.innerHTML = `<table class="tabla"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  renderBarraMasiva();
 
   contenedor.querySelectorAll('.baston-th').forEach((th) => {
     th.addEventListener('click', () => {
@@ -517,6 +585,91 @@ function renderTablaDatos() {
   contenedor.querySelectorAll('.baston-link').forEach((boton) => {
     boton.addEventListener('click', () => verAnimal(boton.dataset.animal));
   });
+
+  // Marcar de a una, o todo lo que esté a la vista (respeta el filtro y el
+  // orden: es la forma de aislar un grupo y asignarle la categoría).
+  contenedor.querySelectorAll('input[data-marcar]').forEach((check) => {
+    check.addEventListener('change', () => {
+      if (check.checked) seleccionadas.add(check.dataset.marcar);
+      else seleccionadas.delete(check.dataset.marcar);
+      check.closest('tr').classList.toggle('marcada', check.checked);
+      renderBarraMasiva();
+    });
+  });
+  const marcarTodo = contenedor.querySelector('#baston-marcar-todo');
+  if (marcarTodo) {
+    marcarTodo.addEventListener('change', () => {
+      for (const f of filasFiltradas()) {
+        if (marcarTodo.checked) seleccionadas.add(f.id);
+        else seleccionadas.delete(f.id);
+      }
+      renderTablaDatos();
+    });
+  }
+
+  contenedor.querySelectorAll('.baston-editable').forEach((celda) => {
+    celda.addEventListener('click', () => abrirEdicionDeCelda(celda));
+  });
+}
+
+function renderBarraMasiva() {
+  const barra = el('baston-masivo');
+  barra.classList.toggle('oculto', seleccionadas.size === 0);
+  el('baston-masivo-cuenta').textContent = seleccionadas.size === 1
+    ? '1 fila seleccionada'
+    : `${seleccionadas.size} filas seleccionadas`;
+}
+
+// Click en una celda de categoría o peso: se convierte en un control, se
+// guarda al salir y vuelve a ser texto. Se arma al tocar y no de entrada
+// para no meter dos controles por fila en una tabla de miles de filas.
+function abrirEdicionDeCelda(celda, contexto) {
+  if (celda.querySelector('select, input')) return;
+  const { id, campo } = celda.dataset;
+  const { filas, redibujar } = contexto || { filas: lecturasCache, redibujar: renderTablaDatos };
+  const fila = filas.find((l) => l.id === id);
+  if (!fila) return;
+
+  const control = celda.dataset.editable === 'categoria'
+    ? document.createElement('select')
+    : document.createElement('input');
+  if (celda.dataset.editable === 'categoria') {
+    control.innerHTML = '<option value="">Sin categoría</option>'
+      + CATEGORIAS.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    control.value = fila[campo] || '';
+  } else {
+    control.type = 'number';
+    control.step = '0.1';
+    control.min = '0';
+    control.value = fila[campo] ?? '';
+  }
+  celda.textContent = '';
+  celda.appendChild(control);
+  control.focus();
+
+  let guardando = false;
+  const cerrar = async () => {
+    if (guardando) return;
+    guardando = true;
+    const crudo = control.value.trim();
+    const nuevo = celda.dataset.editable === 'categoria' ? (crudo || null) : (crudo === '' ? null : Number(crudo));
+    if (nuevo !== (fila[campo] ?? null)) {
+      const guardado = await corregirLectura(id, { [campo]: nuevo });
+      // corregirLectura solo conoce la copia de la planilla; la del
+      // animal hay que ponerla al día acá.
+      if (guardado) {
+        fila[campo] = nuevo;
+        if (campo === 'categoria_id') fila.categoria_nombre = nombreCategoria(nuevo);
+      }
+    }
+    redibujar();
+  };
+  control.addEventListener('blur', cerrar);
+  control.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); control.blur(); }
+    if (e.key === 'Escape') { guardando = true; redibujar(); }
+  });
+  if (celda.dataset.editable === 'categoria') control.addEventListener('change', cerrar);
 }
 
 // Borra la sesión entera. Las lecturas se van con ella (on delete cascade);
@@ -542,6 +695,11 @@ Se borran sus ${cuantas} lecturas. Los animales quedan, con lo que hayan registr
 
 // ─── Pantalla 3: un animal ──────────────────────────────────────────────
 
+// El animal que se está mirando, con sus lecturas: se guardan acá para
+// poder corregirlas sin volver a pedirlas.
+let animalEnPantalla = null;
+let lecturasDelAnimal = [];
+
 async function verAnimal(animalId) {
   mostrarSubseccion('animal');
   // El desplegable se llena solo al entrar a la solapa: hay que esperarlo
@@ -557,26 +715,75 @@ async function verAnimal(animalId) {
   ]);
   const animal = (animales || [])[0];
   if (!animal) { destino.innerHTML = '<div class="ayuda">No encontré ese animal.</div>'; return; }
-  destino.innerHTML = htmlHistoriaAnimal(animal, lecturas || []);
+  animalEnPantalla = animal;
+  lecturasDelAnimal = (lecturas || []).map((l) => ({ ...l, categoria_nombre: nombreCategoria(l.categoria_id) }));
+  renderHistoriaAnimal();
+}
+
+function renderHistoriaAnimal() {
+  const destino = el('baston-animal-resultado');
+  destino.innerHTML = htmlHistoriaAnimal(animalEnPantalla, lecturasDelAnimal);
+  destino.querySelectorAll('.baston-editable').forEach((celda) => {
+    celda.addEventListener('click', () => abrirEdicionDeCelda(celda, {
+      filas: lecturasDelAnimal,
+      redibujar: renderHistoriaAnimal,
+    }));
+  });
+}
+
+// Cuánto engordó por día desde la vez anterior que se lo pesó: la
+// diferencia de kilos dividida por los días que pasaron entre las dos
+// pesadas. Va en la fila de la pesada MÁS NUEVA de cada par, porque es la
+// que cierra el período. Las lecturas sin peso no cortan la serie: se
+// saltean y se compara contra la última pesada de verdad.
+function conGananciaDiaria(lecturas) {
+  const enOrden = [...lecturas].sort((a, b) => String(a.leido_at).localeCompare(String(b.leido_at)));
+  let anterior = null;
+  return enOrden.map((l) => {
+    const peso = l.peso_kg === null || l.peso_kg === undefined ? null : Number(l.peso_kg);
+    let ganancia = null;
+    let desde = null;
+    if (peso !== null && anterior) {
+      const dias = Math.round((new Date(l.leido_at) - new Date(anterior.leido_at)) / 86400000);
+      // Dos pesadas el mismo día no dan una ganancia diaria: dividir por
+      // cero (o por horas) inventaría un número enorme.
+      if (dias > 0) {
+        ganancia = +((peso - anterior.peso) / dias).toFixed(3);
+        desde = { dias, kilos: +(peso - anterior.peso).toFixed(1), fecha: anterior.fecha };
+      }
+    }
+    if (peso !== null) anterior = { peso, leido_at: l.leido_at, fecha: l.fecha };
+    return { ...l, ganancia_calculada: ganancia, gananciaDesde: desde };
+  });
 }
 
 function htmlHistoriaAnimal(animal, lecturas) {
   const columnas = [...new Set(lecturas.flatMap((l) => Object.keys(l.datos || {})))];
-  const encabezados = ['Fecha', 'Sesión', 'Visual', 'Peso', ...columnas];
-  const filas = [...lecturas]
-    .sort((a, b) => String(a.leido_at).localeCompare(String(b.leido_at)))
-    .map((l) => {
-      const celdas = [
-        l.fecha, esc(l.sesion || ''), l.vid ? esc(l.vid) : '—', l.peso_kg ?? '—',
-        ...columnas.map((c) => (l.datos?.[c] ? esc(significadoDe(c, l.datos[c])) : '—')),
-      ];
-      return `<tr>${celdas.map((c) => `<td>${c}</td>`).join('')}</tr>`;
-    }).join('');
+  const encabezados = ['Fecha', 'Sesión', 'Visual', 'Categoría', 'Peso', 'Ganancia diaria (kg)', ...columnas];
+
+  const filas = conGananciaDiaria(lecturas).map((l) => {
+    const editable = (campo, tipo, texto) => `<td class="baston-editable" data-id="${esc(l.id)}" data-campo="${campo}" data-editable="${tipo}">${
+      texto ? esc(texto) : '<span class="baston-vacio">+</span>'}</td>`;
+    const ganancia = l.ganancia_calculada === null
+      ? '<td>—</td>'
+      : `<td><strong>${l.ganancia_calculada.toLocaleString('es-AR', { maximumFractionDigits: 3 })}</strong>`
+        + `<span class="ayuda"> (${l.gananciaDesde.kilos > 0 ? '+' : ''}${l.gananciaDesde.kilos} kg en ${l.gananciaDesde.dias} días)</span></td>`;
+    const celdas = [
+      `<td>${l.fecha}</td>`,
+      `<td>${esc(l.sesion || '')}</td>`,
+      `<td>${l.vid ? esc(l.vid) : '—'}</td>`,
+      editable('categoria_id', 'categoria', nombreCategoria(l.categoria_id)),
+      editable('peso_kg', 'numero', l.peso_kg ?? ''),
+      ganancia,
+      ...columnas.map((c) => `<td>${l.datos?.[c] ? esc(significadoDe(c, l.datos[c])) : '—'}</td>`),
+    ];
+    return `<tr>${celdas.join('')}</tr>`;
+  }).join('');
 
   return `
     <div class="baston-bloque">
       <h3>Caravana ${animal.vid ? esc(animal.vid) : '(sin visual)'}</h3>
-      <div class="ayuda">Electrónica: ${esc(animal.eid_original || animal.eid)} · ${lecturas.length} paso(s) por la manga</div>
+      <div class="ayuda">Electrónica: ${esc(animal.eid_original || animal.eid)} · ${lecturas.length} paso(s) por la manga · tocá una celda de categoría o peso para corregirla</div>
       <table class="tabla">
         <thead><tr>${encabezados.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
         <tbody>${filas || `<tr><td colspan="${encabezados.length}">Sin lecturas.</td></tr>`}</tbody>
@@ -679,6 +886,17 @@ export function initBaston() {
       console.error('Falló al guardar la sesión del bastón:', error);
       mensajeGuardar('No se pudo guardar: ' + error.message, 'error');
     }
+  });
+
+  const selectMasivo = el('baston-masivo-categoria');
+  selectMasivo.innerHTML = '<option value="">Asignar categoría...</option>'
+    + CATEGORIAS.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  el('baston-masivo-aplicar').addEventListener('click', () => {
+    aplicarCategoriaMasiva().catch((error) => mensajeMasivo('No se pudo guardar: ' + error.message, 'error'));
+  });
+  el('baston-masivo-limpiar').addEventListener('click', () => {
+    seleccionadas = new Set();
+    renderTablaDatos();
   });
 
   el('baston-datos-sesion').addEventListener('change', renderTablaDatos);
