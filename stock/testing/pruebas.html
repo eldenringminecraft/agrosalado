@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pruebas — Hacienda</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; background: #f2f2f2; }
+    header { padding: 12px; background: white; border-bottom: 1px solid #ddd; }
+    h1 { font-size: 1.2em; margin: 0 0 8px; }
+    button { padding: 8px 14px; font-size: 1em; cursor: pointer; }
+    .cuerpo { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
+    .resultados { flex: 1 1 auto; min-width: 0; }
+    .prueba {
+      background: white; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
+      font-size: 0.9em; border-left: 4px solid #ccc;
+    }
+    .prueba.ok { border-left-color: #1e7e34; }
+    .prueba.falla { border-left-color: #ad1e19; background: #fdf2f2; }
+    .prueba.corriendo { border-left-color: #8a5a34; color: #666; }
+    .prueba .detalle { font-size: 0.85em; color: #ad1e19; white-space: pre-wrap; margin-top: 4px; }
+    .prueba .duracion { float: right; color: #999; font-size: 0.85em; }
+    #resumen { font-weight: bold; margin-bottom: 8px; }
+    #resumen.ok { color: #1e7e34; }
+    #resumen.falla { color: #ad1e19; }
+    /* La app corre acá adentro, en chiquito: lo que importa son los
+       resultados, pero verla ayuda cuando algo falla. */
+    iframe { width: 390px; height: 700px; border: 1px solid #ccc; background: white; flex-shrink: 0; }
+    @media (max-width: 900px) { .cuerpo { flex-direction: column; } iframe { width: 100%; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🧪 Pruebas de Hacienda</h1>
+    <button type="button" id="correr">Correr todas</button>
+    <span id="resumen"></span>
+  </header>
+  <div class="cuerpo">
+    <div class="resultados" id="resultados"></div>
+    <iframe id="app" title="La app, corriendo contra el mock"></iframe>
+  </div>
+  <script type="module" src="./pruebas.js"></script>
+</body>
+</html>
