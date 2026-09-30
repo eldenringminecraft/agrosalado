@@ -18,6 +18,7 @@
 import { supabase } from './supabaseClient.js';
 import { ESTABLECIMIENTOS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
+import { getEstado } from './auth.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -479,6 +480,13 @@ function renderTablaDatos() {
     ? `${filas.length} lecturas`
     : `${filas.length} de ${lecturasCache.length} lecturas`;
 
+  // Borrar una sesión es solo de owner (así lo dice la RLS de la migración
+  // 046). Para el resto el botón ni aparece: si apareciera, el borrado
+  // fallaría en silencio —RLS no da error, simplemente no borra nada— y
+  // parecería que la app no anda.
+  el('baston-borrar-sesion').classList.toggle('oculto',
+    !el('baston-datos-sesion').value || getEstado().perfil?.rol !== 'owner');
+
   if (!lecturasCache.length) {
     contenedor.innerHTML = '<div class="ayuda">Todavía no subiste ninguna sesión.</div>';
     return;
@@ -509,6 +517,27 @@ function renderTablaDatos() {
   contenedor.querySelectorAll('.baston-link').forEach((boton) => {
     boton.addEventListener('click', () => verAnimal(boton.dataset.animal));
   });
+}
+
+// Borra la sesión entera. Las lecturas se van con ella (on delete cascade);
+// los animales quedan, porque su identidad no depende de una sesión y
+// pueden tener lecturas en otras.
+async function borrarSesion() {
+  const sesionId = el('baston-datos-sesion').value;
+  if (!sesionId) return;
+  const opcion = el('baston-datos-sesion').selectedOptions[0];
+  const cuantas = lecturasCache.filter((l) => l.sesion_id === sesionId).length;
+  if (!confirm(`¿Eliminar la sesión "${opcion.textContent}"?
+
+Se borran sus ${cuantas} lecturas. Los animales quedan, con lo que hayan registrado en otras sesiones. No se puede deshacer.`)) return;
+
+  const { error } = await supabase.from('sesiones_baston').delete().eq('id', sesionId);
+  if (error) {
+    alert('No se pudo eliminar: ' + error.message);
+    return;
+  }
+  el('baston-datos-sesion').value = '';
+  await cargarDatos();
 }
 
 // ─── Pantalla 3: un animal ──────────────────────────────────────────────
@@ -653,6 +682,9 @@ export function initBaston() {
   });
 
   el('baston-datos-sesion').addEventListener('change', renderTablaDatos);
+  el('baston-borrar-sesion').addEventListener('click', () => {
+    borrarSesion().catch((error) => alert('No se pudo eliminar: ' + error.message));
+  });
   el('baston-datos-filtro').addEventListener('input', renderTablaDatos);
 
   el('baston-animal-select').addEventListener('change', (e) => {

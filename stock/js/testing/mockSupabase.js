@@ -189,6 +189,33 @@ function actualizarRodeoTrasMovimiento(TABLAS, mov) {
   }
 }
 
+// "on delete cascade" del esquema: borrar el padre se lleva a los hijos.
+// Sin esto el mock miente sobre lo que pasa de verdad — una prueba podría
+// dar por bueno que algo quedó cuando en la base se borra.
+const CASCADAS = {
+  sesiones_baston: [['lecturas_baston', 'sesion_id']],
+  trabajos_manga: [
+    ['trabajo_manga_propietarios', 'trabajo_manga_id'],
+    ['trabajo_manga_categorias', 'trabajo_manga_id'],
+    ['trabajo_manga_sanidad', 'trabajo_manga_id'],
+    ['trabajo_manga_vacunas', 'trabajo_manga_id'],
+    ['trabajo_manga_otras_sanidades', 'trabajo_manga_id'],
+    ['trabajo_manga_reproduccion', 'trabajo_manga_id'],
+    ['trabajo_manga_inseminacion_toros', 'trabajo_manga_id'],
+    ['trabajo_manga_manejo', 'trabajo_manga_id'],
+  ],
+  columnas_baston: [['codigos_baston', 'columna']],
+};
+
+function borrarEnCascada(TABLAS, tabla, borradas) {
+  for (const [hija, campo] of CASCADAS[tabla] || []) {
+    if (!TABLAS[hija]) continue;
+    const clave = tabla === 'columnas_baston' ? 'columna' : 'id';
+    const ids = new Set(borradas.map((f) => f[clave]));
+    TABLAS[hija] = TABLAS[hija].filter((f) => !ids.has(f[campo]));
+  }
+}
+
 // ─── cliente falso ──────────────────────────────────────────────────────
 
 function clonar(filas) {
@@ -356,6 +383,7 @@ export function activarMockSupabase(supabase, tablas) {
           // columna id — filtrando por id se borraría la tabla entera.
           const aBorrar = new Set(filas);
           TABLAS[tabla] = TABLAS[tabla].filter((f) => !aBorrar.has(f));
+          borrarEnCascada(TABLAS, tabla, filas);
           resolve({ data: clonar(filas), error: null });
           return;
         }
