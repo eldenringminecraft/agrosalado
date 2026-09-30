@@ -597,7 +597,7 @@
 
       <div class="filtros">
         <button type="button" class="boton-secundario baston-tab activo" data-subseccion="subir">Subir sesión</button>
-        <button type="button" class="boton-secundario baston-tab" data-subseccion="sesiones">Sesiones</button>
+        <button type="button" class="boton-secundario baston-tab" data-subseccion="datos">Datos</button>
         <button type="button" class="boton-secundario baston-tab" data-subseccion="animal">Buscar animal</button>
       </div>
 
@@ -620,8 +620,8 @@
           </div>
 
           <div id="baston-desconocidos" class="campo-grupo full oculto">
-            <div class="etiqueta-grupo">❓ Esto no lo conozco todavía</div>
-            <p class="ayuda">Se pregunta una sola vez: la próxima sesión con estas columnas ya no lo vuelve a preguntar.</p>
+            <div class="etiqueta-grupo">❓ Códigos que no conozco</div>
+            <p class="ayuda">Se pregunta una sola vez. Se pueden dejar en blanco: sin traducción se muestran tal cual vienen.</p>
             <div id="baston-desconocidos-lista"></div>
           </div>
 
@@ -649,18 +649,25 @@
         </div>
       </div>
 
-      <!-- ② SESIONES ──────────────────────────────────────────────── -->
-      <div id="baston-sesiones" class="baston-seccion oculto">
-        <div id="baston-sesiones-lista"></div>
-        <div id="baston-sesion-detalle" class="oculto imprimible"></div>
+      <!-- ② DATOS ───────────────────────────────────────────────────
+           Una planilla, no un tablero: primero hay que poder mirar los
+           datos crudos, ordenarlos y filtrarlos. Los índices vienen
+           después, cuando esté definido cuáles sacar. -->
+      <div id="baston-datos" class="baston-seccion oculto">
+        <div class="filtros">
+          <select id="baston-datos-sesion"><option value="">Todas las sesiones</option></select>
+          <input type="search" id="baston-datos-filtro" placeholder="Filtrar...">
+          <span id="baston-datos-cuenta" class="ayuda"></span>
+        </div>
+        <p class="ayuda">Tocá un encabezado para ordenar por esa columna, o una caravana para ver ese animal.</p>
+        <div id="baston-datos-tabla" style="overflow-x:auto;"></div>
       </div>
 
       <!-- ③ BUSCAR ANIMAL ─────────────────────────────────────────── -->
       <div id="baston-animal" class="baston-seccion oculto">
         <div class="filtros">
-          <label>Caravana (visual o electrónica)
-            <input type="text" id="baston-animal-buscar" placeholder="Ej: 4975">
-          </label>
+          <select id="baston-animal-select"><option value="">Elegir animal...</option></select>
+          <input type="text" id="baston-animal-buscar" placeholder="O escribir la caravana: 4975">
           <button type="button" id="baston-animal-boton" class="boton-secundario">Buscar</button>
         </div>
         <div id="baston-animal-resultado"></div>
