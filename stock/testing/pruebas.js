@@ -111,10 +111,15 @@ async function abrirApp(semilla, pantalla = 'cargar') {
       select.value = valor;
       select.dispatchEvent(new ventana.Event('change'));
     },
+    // Con bubbles: varios listeners de la app están puestos en el <form>,
+    // no en cada campo (mov-form escucha 'input' para rehacer el resumen y
+    // las ayudas). Un evento que no burbujea no los despierta, y la prueba
+    // mediría una pantalla que en el uso real sí se habría actualizado.
     escribir: (id, valor) => {
       const campo = doc.getElementById(id);
       campo.value = valor;
-      campo.dispatchEvent(new ventana.Event('input'));
+      campo.dispatchEvent(new ventana.Event('input', { bubbles: true }));
+      campo.dispatchEvent(new ventana.Event('change', { bubbles: true }));
     },
     enviar: (formId) => doc.getElementById(formId)
       .dispatchEvent(new ventana.Event('submit', { cancelable: true })),
