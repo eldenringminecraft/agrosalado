@@ -224,12 +224,26 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
   line-height: 1.35;
   color: #6b4f1d;
 }
+/* Era el texto más chico de la pantalla (13,6px) y es el número que hay
+   que mirar justo antes de confirmar una venta. */
+#mov-stock-disponible {
+  font-size: 1em;
+  color: #333;
+  background: #eef4ee;
+  border-left: 3px solid #1e7e34;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 4px 0 10px;
+}
+#mov-stock-disponible strong { font-size: 1.15em; }
+
 #mov-form #mov-resumen {
   position: sticky;
   bottom: 52px;
   z-index: 11;
 }
-#mov-form #mov-submit {
+#mov-form #mov-submit,
+#manga-form #manga-submit {
   position: sticky;
   bottom: 0;
   z-index: 10;
@@ -252,10 +266,16 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .checkbox-linea {
   flex-direction: row !important;
   align-items: center;
-  gap: 8px !important;
+  gap: 10px !important;
+  /* Toda la fila es zona tocable, no solo el cuadradito. */
+  min-height: 44px;
+  margin: 0;
+  padding: 2px 4px;
+  cursor: pointer;
 }
+.checkbox-linea:active { background: #f0e6dc; border-radius: 6px; }
 .checkbox-linea input[type="checkbox"] {
-  width: 20px; height: 20px;
+  width: 24px; height: 24px;
   flex-shrink: 0;
   padding: 0;
   background: none;
@@ -365,10 +385,14 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 }
 .boton-opcion.deshabilitado,
 .boton-opcion:disabled {
-  background: #e0e0e0;
-  color: #aaa;
-  border-color: #e0e0e0;
+  background: #e4e4e4;
+  color: #5c5c5c;
+  border-color: #cfcfcf;
   cursor: not-allowed;
+  /* Que además se note sin depender del color, para el que no distingue
+     bien el gris del blanco al sol. */
+  text-decoration: line-through;
+  text-decoration-color: #9a9a9a;
 }
 
 button {

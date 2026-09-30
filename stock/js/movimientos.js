@@ -896,7 +896,9 @@ async function actualizarStockDisponibleTexto() {
   const donde = rodeo.establecimiento_id === 'feed_lot' && rodeo.corral
     ? `el Corral ${rodeo.corral}`
     : `"${rodeo.codigo}"`;
-  texto.textContent = `Stock disponible de ${nombreCategoria} de este titular en ${donde}: ${cabezas} cabeza(s).`;
+  // Con el número en negrita: es lo único que se mira de esta línea. El
+  // resto va escapado porque el código del rodeo lo escribe el usuario.
+  texto.innerHTML = `Stock disponible de ${esc(nombreCategoria)} de este titular en ${esc(donde)}: <strong>${Number(cabezas)}</strong> cabeza(s).`;
   texto.classList.remove('oculto');
 }
 
