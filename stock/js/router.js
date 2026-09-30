@@ -5,7 +5,7 @@ import { refrescarReportes } from './reportes.js';
 import { refrescarBaston } from './baston.js';
 import { refrescarConsultaEstablecimiento, refrescarRodeosDeCarga } from './movimientos.js';
 
-const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'baston', 'reportes'];
+const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'baston', 'reportes', 'historial'];
 // Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
 // pantallas quedan para encargado/administrativo/owner).
 const PANTALLAS_PUESTERO = ['cargar', 'manga'];
